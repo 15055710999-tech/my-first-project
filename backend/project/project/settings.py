@@ -58,6 +58,20 @@ MIDDLEWARE = [
 CORS_ALLOW_ALL_ORIGINS = True  # 开发环境允许所有来源
 CORS_ALLOW_CREDENTIALS = True  # 允许携带cookie
 
+# 允许自定义请求头
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'x-user',  # 允许 X-USER 请求头
+]
+
 ROOT_URLCONF = 'project.urls'
 
 TEMPLATES = [
@@ -116,9 +130,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'zh-hans'  # 简体中文
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Shanghai'  # 中国时区
 
 USE_I18N = True
 

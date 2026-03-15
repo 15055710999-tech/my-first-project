@@ -35,15 +35,24 @@ class Article(models.Model):
 
 class Post(models.Model):
     """用户论坛帖子模型"""
+    MODERATION_STATUS_CHOICES = [
+        ("pending", "待审核"),
+        ("approved", "已通过"),
+        ("rejected", "已拒绝"),
+    ]
+    
     title = models.CharField(max_length=200, verbose_name='标题')
     content = models.TextField(verbose_name='内容')
     author = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='作者')
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, verbose_name='分类')
     cover_image = models.ImageField(upload_to='posts/', null=True, blank=True, verbose_name='封面图片')
+    images = models.JSONField(default=list, verbose_name='图片列表')
+    tags = models.JSONField(default=list, verbose_name='话题标签')
     view_count = models.IntegerField(default=0, verbose_name='浏览量')
     comment_count = models.IntegerField(default=0, verbose_name='评论数')
     is_published = models.BooleanField(default=False, verbose_name='是否发布')
     is_essence = models.BooleanField(default=False, verbose_name='是否加精')
+    moderation_status = models.CharField(max_length=20, choices=MODERATION_STATUS_CHOICES, default='pending', verbose_name='审核状态')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
     
@@ -55,17 +64,28 @@ class Post(models.Model):
 class Comment(models.Model):
     """评论模型"""
     content = models.TextField(verbose_name='评论内容')
-    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='评论用户')
-    target_type = models.CharField(max_length=20, verbose_name='评论对象类型')  # article或post
-    target_id = models.IntegerField(verbose_name='评论对象ID')
+    author = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='评论用户', related_name='comments', null=True, blank=True)
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, verbose_name='所属帖子', related_name='comments', null=True, blank=True)
     parent_comment = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='父评论')
-    is_published = models.BooleanField(default=False, verbose_name='是否发布')
+    is_published = models.BooleanField(default=True, verbose_name='是否发布')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='评论时间')
     
     class Meta:
         verbose_name = '评论'
         verbose_name_plural = '评论'
-        ordering = ['created_at']
+        ordering = ['-created_at']
+
+class PostView(models.Model):
+    """帖子浏览记录模型 - 用于记录用户浏览过的帖子"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='用户')
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, verbose_name='帖子')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='浏览时间')
+    
+    class Meta:
+        verbose_name = '帖子浏览记录'
+        verbose_name_plural = '帖子浏览记录'
+        unique_together = ['user', 'post']  # 每个用户对每个帖子只能有一条记录
+        ordering = ['-created_at']
 
 class Player(models.Model):
     """球员模型"""

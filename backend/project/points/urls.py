@@ -6,7 +6,11 @@ urlpatterns = [
     # 篮球资讯 & 社区
     path("feed/", views.feed, name="basketball_feed"),
     path("posts/", views.post_list_create, name="post_list_create"),
+    path("posts/my/", views.my_posts, name="my_posts"),
     path("posts/<int:post_id>/", views.post_detail, name="post_detail"),
+    path("posts/<int:post_id>/comment/", views.post_comment, name="post_comment"),
+    path("posts/<int:post_id>/delete/", views.post_delete, name="post_delete"),
+    path("comments/<int:comment_id>/delete/", views.comment_delete, name="comment_delete"),
 
     # 比赛比分
     path("games/", views.game_list, name="game_list"),

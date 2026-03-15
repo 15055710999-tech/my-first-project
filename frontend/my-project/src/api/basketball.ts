@@ -15,13 +15,33 @@ export const getPostsApi = () => {
   return request.get('/basketball/posts/')
 }
 
-export const createPostApi = (data: { title: string; content: string }) => {
+export const createPostApi = (data: { title: string; content: string; images?: string[]; tags?: string[] }) => {
   return request.post('/basketball/posts/', data)
 }
 
 // 帖子详情
 export const getPostDetailApi = (id: number) => {
   return request.get(`/basketball/posts/${id}/`)
+}
+
+// 发表评论或回复评论
+export const createCommentApi = (postId: number, data: { content: string; parent_comment_id?: number | null }) => {
+  return request.post(`/basketball/posts/${postId}/comment/`, data)
+}
+
+// 删除帖子
+export const deletePostApi = (id: number) => {
+  return request.post(`/basketball/posts/${id}/delete/`)
+}
+
+// 删除评论
+export const deleteCommentApi = (id: number) => {
+  return request.post(`/basketball/comments/${id}/delete/`)
+}
+
+// 获取我的所有帖子（包括待审核、已拒绝）
+export const getMyPostsApi = () => {
+  return request.get('/basketball/posts/my/')
 }
 
 // 球员评分相关
