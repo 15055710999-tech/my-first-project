@@ -11,8 +11,8 @@ export const getGamesApi = () => {
 }
 
 // 帖子列表 & 发帖
-export const getPostsApi = () => {
-  return request.get('/basketball/posts/')
+export const getPostsApi = (params?: any) => {
+  return request.get('/basketball/posts/', { params })
 }
 
 export const createPostApi = (data: { title: string; content: string; images?: string[]; tags?: string[] }) => {
@@ -65,5 +65,20 @@ export const createOrderApi = (data: { items: { product_id: number; quantity: nu
 // AI 篮球教练
 export const askCoachApi = (data: { question: string }) => {
   return request.post('/basketball/coach/ask/', data)
+}
+
+// 帖子点赞相关
+export const likePostApi = (postId: number) => {
+  return request.post(`/basketball/posts/${postId}/like/`)
+}
+
+// 获取帖子详情（包含点赞状态）
+export const getPostDetailWithLikeStatusApi = (postId: number) => {
+  return request.get(`/basketball/posts/${postId}/detail/`)
+}
+
+// 获取用户已点赞的帖子
+export const getMyLikedPostsApi = () => {
+  return request.get('/basketball/posts/my/liked/')
 }
 

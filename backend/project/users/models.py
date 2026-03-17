@@ -8,6 +8,8 @@ class User(AbstractUser):
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True, verbose_name='头像')
     bio = models.TextField(max_length=500, null=True, blank=True, verbose_name='个人简介')
     phone = models.CharField(max_length=11, null=True, blank=True, verbose_name='手机号')
+    gender = models.CharField(max_length=10, choices=[('male', '男'), ('female', '女'), ('other', '其他')], null=True, blank=True, verbose_name='性别')
+    birth_date = models.DateField(null=True, blank=True, verbose_name='出生年月')
     
     # 积分和等级系统
     points = models.IntegerField(default=0, verbose_name='积分')

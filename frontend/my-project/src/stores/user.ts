@@ -7,6 +7,11 @@ export interface User {
   phone?: string
   avatar?: string
   points_balance: number
+  points?: number
+  level?: number
+  gender?: string
+  birth_date?: string
+  bio?: string
   last_sign_in?: string
   sign_in_streak: number
   is_staff: boolean

@@ -11,6 +11,7 @@ from .models import (
     Post,
     Comment,
     PostView,
+    PostLike,
     Player,
     PlayerRating,
     Product,
@@ -26,17 +27,24 @@ def _user_from_request(request: HttpRequest):
     """非常简化的鉴权：根据用户名获取用户，仅用于演示。
     实际项目建议使用 JWT / session 等更安全的方案。
     """
-    username = request.headers.get("X-USER") or request.GET.get("username")
-    
-    # 添加调试日志
-    print(f"调试信息 - 请求头: {dict(request.headers)}")
-    print(f"调试信息 - 用户名: {username}")
-    
-    if not username:
-        return None
     try:
-        return User.objects.get(username=username)
-    except User.DoesNotExist:
+        username = request.headers.get("X-USER") or request.GET.get("username")
+        
+        # 添加调试日志
+        print(f"调试信息 - 请求头: {dict(request.headers)}")
+        print(f"调试信息 - 用户名: {username}")
+        
+        if not username:
+            return None
+        try:
+            user = User.objects.get(username=username)
+            print(f"调试信息 - 找到用户: {user.username}")
+            return user
+        except User.DoesNotExist:
+            print(f"调试信息 - 用户不存在: {username}")
+            return None
+    except Exception as e:
+        print(f"调试信息 - _user_from_request 错误: {str(e)}")
         return None
 
 
@@ -130,6 +138,7 @@ def feed(request: HttpRequest):
             "author": p.author.username if p.author else "匿名",
             "view_count": p.view_count,
             "comment_count": p.comment_count,
+            "like_count": p.like_count,
             "created_at": p.created_at.strftime("%Y-%m-%d %H:%M:%S") if p.created_at else None,
             "is_published": p.is_published,
             "is_essence": p.is_essence,
@@ -153,8 +162,28 @@ def feed(request: HttpRequest):
 def post_list_create(request: HttpRequest):
     """帖子列表 + 发表帖子"""
     if request.method == "GET":
-        # 只返回审核通过且已发布的帖子
-        posts = Post.objects.filter(moderation_status='approved', is_published=True)
+        # 获取查询参数
+        page = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('page_size', 11))
+        is_essence = request.GET.get('is_essence', None)
+        
+        # 构建查询
+        query = Post.objects.filter(moderation_status='approved', is_published=True)
+        
+        # 如果请求精品帖子
+        if is_essence == 'true':
+            query = query.filter(is_essence=True)
+        # 如果不是请求精品帖子，不要过滤is_essence字段
+        
+        # 计算总数
+        total = query.count()
+        
+        # 分页
+        start = (page - 1) * page_size
+        end = start + page_size
+        posts = query[start:end]
+        
+        user = _user_from_request(request)
         data = [
             {
                 "id": p.id,
@@ -166,13 +195,25 @@ def post_list_create(request: HttpRequest):
                 "tags": p.tags if p.tags else [],
                 "view_count": p.view_count,
                 "comment_count": p.comment_count,
+                "like_count": p.like_count,
+                "is_liked": user and PostLike.objects.filter(user=user, post=p).exists(),
                 "created_at": p.created_at.strftime("%Y-%m-%d %H:%M:%S") if p.created_at else None,
                 "is_essence": p.is_essence,
                 "moderation_status": p.moderation_status,
             }
             for p in posts
         ]
-        return JsonResponse({"code": 200, "data": data})
+        
+        return JsonResponse({
+            "code": 200, 
+            "data": data,
+            "pagination": {
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": (total + page_size - 1) // page_size
+            }
+        })
 
     if request.method == "POST":
         try:
@@ -267,6 +308,7 @@ def post_detail(request: HttpRequest, post_id: int):
         "author_id": post.author.id if post.author else None,
         "view_count": post.view_count,
         "comment_count": post.comment_count,
+        "like_count": post.like_count,
         "created_at": post.created_at.strftime("%Y-%m-%d %H:%M:%S") if post.created_at else None,
         "is_published": post.is_published,
         "is_essence": post.is_essence,
@@ -419,6 +461,8 @@ def my_posts(request: HttpRequest):
             "tags": p.tags if p.tags else [],
             "view_count": p.view_count,
             "comment_count": p.comment_count,
+            "like_count": p.like_count,
+            "is_liked": PostLike.objects.filter(user=user, post=p).exists(),
             "created_at": p.created_at.strftime("%Y-%m-%d %H:%M:%S") if p.created_at else None,
             "is_essence": p.is_essence,
             "is_published": p.is_published,
@@ -592,3 +636,165 @@ def coach_ask(request: HttpRequest):
             },
         }
     )
+
+
+@csrf_exempt
+def post_like(request: HttpRequest, post_id: int):
+    """帖子点赞/取消点赞"""
+    if request.method != "POST":
+        return JsonResponse({"code": 405, "message": "仅支持 POST 请求"}, status=405)
+
+    user = _user_from_request(request)
+    if user is None:
+        return JsonResponse({"code": 401, "message": "未登录"}, status=401)
+
+    try:
+        post = Post.objects.get(id=post_id)
+    except Post.DoesNotExist:
+        return JsonResponse({"code": 404, "message": "帖子不存在"}, status=404)
+
+    # 检查是否已经点赞
+    like_record, created = PostLike.objects.get_or_create(user=user, post=post)
+    
+    if created:
+        # 新点赞，增加点赞数
+        post.like_count += 1
+        post.save(update_fields=['like_count'])
+        return JsonResponse({"code": 200, "message": "点赞成功", "data": {"like_count": post.like_count, "is_liked": True}})
+    else:
+        # 已点赞，取消点赞
+        like_record.delete()
+        post.like_count = max(0, post.like_count - 1)
+        post.save(update_fields=['like_count'])
+        return JsonResponse({"code": 200, "message": "取消点赞成功", "data": {"like_count": post.like_count, "is_liked": False}})
+
+
+@csrf_exempt
+def my_liked_posts(request: HttpRequest):
+    """获取用户已点赞的帖子"""
+    try:
+        if request.method != "GET":
+            return JsonResponse({"code": 405, "message": "仅支持 GET 请求"}, status=405)
+
+        user = _user_from_request(request)
+        if user is None:
+            return JsonResponse({"code": 401, "message": "未登录"}, status=401)
+
+        print(f"调试信息 - 用户: {user.username}")
+
+        # 获取用户点赞的帖子
+        liked_posts = Post.objects.filter(postlike__user=user, is_published=True, moderation_status='approved').order_by('-postlike__created_at')
+        print(f"调试信息 - 找到 {liked_posts.count()} 个点赞帖子")
+        
+        data = []
+        for p in liked_posts:
+            try:
+                post_data = {
+                    "id": p.id,
+                    "title": p.title,
+                    "content": p.content[:100] + ("..." if len(p.content) > 100 else ""),
+                    "author": p.author.username if p.author else "匿名",
+                    "author_avatar": p.author.avatar.url if p.author and p.author.avatar else None,
+                    "view_count": p.view_count,
+                    "comment_count": p.comment_count,
+                    "like_count": p.like_count,
+                    "created_at": p.created_at.strftime("%Y-%m-%d %H:%M:%S") if p.created_at else None,
+                    "is_essence": p.is_essence,
+                }
+                data.append(post_data)
+            except Exception as e:
+                print(f"调试信息 - 处理帖子 {p.id} 错误: {str(e)}")
+        
+        return JsonResponse({"code": 200, "data": data})
+    except Exception as e:
+        print(f"调试信息 - my_liked_posts 错误: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({"code": 500, "message": "服务器内部错误"}, status=500)
+
+
+def post_detail_with_like_status(request: HttpRequest, post_id: int):
+    """获取帖子详情，包含当前用户的点赞状态"""
+    try:
+        print(f"调试信息 - post_detail_with_like_status 被调用，post_id: {post_id}")
+        
+        try:
+            post = Post.objects.get(id=post_id)
+            print(f"调试信息 - 找到帖子: {post.title}")
+        except Post.DoesNotExist:
+            print(f"调试信息 - 帖子不存在: {post_id}")
+            return JsonResponse({"code": 404, "message": "帖子不存在"}, status=404)
+
+        # 获取当前用户
+        user = _user_from_request(request)
+        print(f"调试信息 - 用户: {user.username if user else None}")
+        
+        # 检查是否已点赞
+        is_liked = False
+        if user:
+            is_liked = PostLike.objects.filter(user=user, post=post).exists()
+            print(f"调试信息 - 是否已点赞: {is_liked}")
+        
+        # 增加浏览量（如果用户已登录）
+        if user:
+            try:
+                view_record, created = PostView.objects.get_or_create(
+                    user=user,
+                    post=post
+                )
+                if created:
+                    post.view_count += 1
+                    post.save(update_fields=['view_count'])
+                    print(f"调试信息 - 增加浏览量: {post.view_count}")
+            except Exception as e:
+                print(f"调试信息 - 增加浏览量错误: {str(e)}")
+        
+        # 获取已发布的评论列表
+        comments = Comment.objects.filter(post=post, is_published=True).order_by('-created_at')
+        print(f"调试信息 - 找到 {comments.count()} 条评论")
+        
+        comments_data = []
+        for c in comments:
+            try:
+                comment_data = {
+                    "id": c.id,
+                    "content": c.content,
+                    "author": c.author.username if c.author else "匿名",
+                    "author_id": c.author.id if c.author else None,
+                    "parent_comment_id": c.parent_comment.id if c.parent_comment else None,
+                    "parent_comment_author": c.parent_comment.author.username if c.parent_comment and c.parent_comment.author else None,
+                    "created_at": c.created_at.strftime("%Y-%m-%d %H:%M:%S") if c.created_at else None,
+                }
+                comments_data.append(comment_data)
+            except Exception as e:
+                print(f"调试信息 - 处理评论 {c.id} 错误: {str(e)}")
+
+        try:
+            data = {
+                "id": post.id,
+                "title": post.title,
+                "content": post.content,
+                "author": post.author.username if post.author else "匿名",
+                "author_id": post.author.id if post.author else None,
+                "author_avatar": post.author.avatar.url if post.author and post.author.avatar else None,
+                "view_count": post.view_count,
+                "comment_count": post.comment_count,
+                "like_count": post.like_count,
+                "is_liked": is_liked,
+                "created_at": post.created_at.strftime("%Y-%m-%d %H:%M:%S") if post.created_at else None,
+                "is_published": post.is_published,
+                "is_essence": post.is_essence,
+                "comments": comments_data,
+            }
+            print(f"调试信息 - 准备返回数据")
+            return JsonResponse({"code": 200, "data": data})
+        except Exception as e:
+            print(f"调试信息 - 构建返回数据错误: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({"code": 500, "message": "服务器内部错误"}, status=500)
+    except Exception as e:
+        print(f"调试信息 - post_detail_with_like_status 错误: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({"code": 500, "message": "服务器内部错误"}, status=500)

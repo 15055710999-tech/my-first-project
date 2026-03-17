@@ -6,6 +6,7 @@ import Community from '../views/Community.vue'
 import Coach from '../views/Coach.vue'
 import Players from '../views/Players.vue'
 import Shop from '../views/Shop.vue'
+import Profile from '../views/Profile.vue'
 
 const routes = [
   {
@@ -39,6 +40,12 @@ const routes = [
     meta: { requiresAuth: true } // 篮球商城
   },
   {
+    path: '/profile',
+    name: 'Profile',
+    component: Profile,
+    meta: { requiresAuth: true } // 个人中心
+  },
+  {
     path: '/login',
     name: 'Login',
     component: Login,
@@ -58,7 +65,7 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   const token = localStorage.getItem('token')
 
   // 需要登录的页面

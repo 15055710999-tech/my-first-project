@@ -50,6 +50,7 @@ class Post(models.Model):
     tags = models.JSONField(default=list, verbose_name='话题标签')
     view_count = models.IntegerField(default=0, verbose_name='浏览量')
     comment_count = models.IntegerField(default=0, verbose_name='评论数')
+    like_count = models.IntegerField(default=0, verbose_name='点赞数')
     is_published = models.BooleanField(default=False, verbose_name='是否发布')
     is_essence = models.BooleanField(default=False, verbose_name='是否加精')
     moderation_status = models.CharField(max_length=20, choices=MODERATION_STATUS_CHOICES, default='pending', verbose_name='审核状态')
@@ -85,6 +86,18 @@ class PostView(models.Model):
         verbose_name = '帖子浏览记录'
         verbose_name_plural = '帖子浏览记录'
         unique_together = ['user', 'post']  # 每个用户对每个帖子只能有一条记录
+        ordering = ['-created_at']
+
+class PostLike(models.Model):
+    """帖子点赞记录模型 - 用于记录用户的点赞记录"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='用户')
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, verbose_name='帖子')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='点赞时间')
+    
+    class Meta:
+        verbose_name = '帖子点赞记录'
+        verbose_name_plural = '帖子点赞记录'
+        unique_together = ['user', 'post']  # 每个用户对每个帖子只能点赞一次
         ordering = ['-created_at']
 
 class Player(models.Model):

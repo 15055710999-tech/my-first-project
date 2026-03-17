@@ -64,8 +64,13 @@ const handleLogin = async () => {
     console.log('登录成功:', res)
     
     // 保存 token 和用户信息
+    const userInfo = res.data.user
+    // 确保头像URL是完整的
+    if (userInfo.avatar && !userInfo.avatar.startsWith('http')) {
+      userInfo.avatar = `http://localhost:8000${userInfo.avatar}`
+    }
     userStore.setToken(res.data.token)
-    userStore.setUserInfo(res.data.user)
+    userStore.setUserInfo(userInfo)
     
     alert('登录成功！')
     router.push('/')  // 跳转到首页

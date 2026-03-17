@@ -36,6 +36,12 @@
         >
           篮球商城
         </button>
+        <button
+          @click="router.push('/profile')"
+          :class="{ active: route.path === '/profile' }"
+        >
+          个人中心
+        </button>
       </div>
 
       <div class="auth-links" v-if="!userStore.isLoggedIn">
@@ -50,6 +56,9 @@
       <div class="user-info" v-else>
         <span>欢迎，{{ userStore.userInfo?.username }}</span>
         <span class="points">积分: {{ userStore.userInfo?.points_balance }}</span>
+        <button @click="router.push('/profile')" class="profile-btn">
+          个人中心
+        </button>
         <button @click="handleLogout">退出</button>
       </div>
     </nav>
@@ -165,14 +174,27 @@ nav {
 
 .user-info button {
   padding: 5px 15px;
-  background-color: #f56c6c;
-  color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
 }
 
-.user-info button:hover {
+.user-info .profile-btn {
+  background-color: #667eea;
+  color: white;
+  margin-right: 10px;
+}
+
+.user-info .profile-btn:hover {
+  background-color: #764ba2;
+}
+
+.user-info button:last-child {
+  background-color: #f56c6c;
+  color: white;
+}
+
+.user-info button:last-child:hover {
   background-color: #e64242;
 }
 

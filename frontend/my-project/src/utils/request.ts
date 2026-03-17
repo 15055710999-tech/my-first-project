@@ -8,7 +8,18 @@ const request = axios.create({
     'Content-Type': 'application/json'
   }
 })
-
+// 添加用户信息到请求头
+const user = localStorage.getItem('user')
+if (user) {
+  try {
+    const userInfo = JSON.parse(user)
+    if (userInfo && userInfo.username) {
+      request.defaults.headers.common['X-USER'] = userInfo.username
+    }
+  } catch (error) {
+    console.error('解析用户信息失败:', error)
+  }
+}
 // 请求拦截器
 request.interceptors.request.use(
   config => {
@@ -17,6 +28,20 @@ request.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+    
+    // 添加用户信息到请求头
+    const user = localStorage.getItem('user')
+    if (user) {
+      try {
+        const userInfo = JSON.parse(user)
+        if (userInfo && userInfo.username) {
+          config.headers['X-USER'] = userInfo.username
+        }
+      } catch (error) {
+        console.error('解析用户信息失败:', error)
+      }
+    }
+    
     return config
   },
   error => {
@@ -61,5 +86,7 @@ request.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+
 
 export default request

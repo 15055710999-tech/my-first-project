@@ -29,7 +29,7 @@
         </div>
         <div class="user-info">
           <div class="avatar">
-            <img :src="`https://ui-avatars.com/api/?name=${userStore.userInfo?.username || 'User'}&background=667eea&color=fff`" alt="头像">
+            <img :src="userStore.userInfo?.avatar || `https://ui-avatars.com/api/?name=${userStore.userInfo?.username || 'User'}&background=667eea&color=fff`" alt="头像">
           </div>
           <div class="user-details">
             <span class="username">{{ userStore.userInfo?.username || '用户' }}</span>
@@ -110,15 +110,22 @@
           <button 
             class="tab-btn" 
             :class="{ active: currentTab === 'all' }"
-            @click="currentTab = 'all'"
+            @click="currentTab = 'all'; pagination.currentPage = 1; fetchPosts()"
           >
             最新动态
+          </button>
+          <button 
+            class="tab-btn" 
+            :class="{ active: currentTab === 'essence' }"
+            @click="currentTab = 'essence'; pagination.currentPage = 1; fetchPosts()"
+          >
+            精品动态
           </button>
           <button 
             v-if="userStore.userInfo"
             class="tab-btn" 
             :class="{ active: currentTab === 'my' }"
-            @click="currentTab = 'my'"
+            @click="currentTab = 'my'; pagination.currentPage = 1; fetchMyPosts()"
           >
             我的帖子
           </button>
@@ -133,17 +140,47 @@
         <p>{{ currentTab === 'my' ? '你还没有发布过帖子' : '还没有帖子，来当第一个发帖的球迷吧！' }}</p>
       </div>
       <ul v-else class="posts-list-simple">
-        <li v-for="post in posts" :key="post.id" class="post-item-simple" @click="viewPostDetail(post)">
-          <div class="post-title-simple">{{ post.title }}</div>
+        <li v-for="post in posts" :key="post.id" class="post-item-simple">
+          <div class="post-title-simple" @click="viewPostDetail(post)">{{ post.title }}</div>
           <div class="post-stats-simple">
             <span class="stat-item">👁️ {{ post.view_count }}</span>
             <span class="stat-item">💬 {{ post.comment_count }}回复</span>
+            <button 
+              class="like-btn" 
+              @click.stop="handleLike(post)"
+              :class="{ 'liked': post.is_liked }"
+              title="点赞"
+            >
+              <span class="like-icon">{{ post.is_liked ? '❤️' : '🤍' }}</span>
+              <span class="like-count">{{ post.like_count }}</span>
+            </button>
             <span v-if="currentTab === 'my'" class="status-tag-simple" :class="post.moderation_status">
               {{ getStatusText(post.moderation_status) }}
             </span>
           </div>
         </li>
       </ul>
+      
+      <!-- 分页组件 -->
+      <div v-if="pagination.total > 0" class="pagination">
+        <button 
+          class="page-btn" 
+          @click="pagination.currentPage--; fetchPosts()"
+          :disabled="pagination.currentPage === 1"
+        >
+          上一页
+        </button>
+        <span class="page-info">
+          {{ pagination.currentPage }} / {{ pagination.totalPages }}
+        </span>
+        <button 
+          class="page-btn" 
+          @click="pagination.currentPage++; fetchPosts()"
+          :disabled="pagination.currentPage === pagination.totalPages"
+        >
+          下一页
+        </button>
+      </div>
     </div>
   </div>
   
@@ -159,7 +196,7 @@
       <div class="post-detail-content">
         <div class="detail-post-header">
           <div class="avatar">
-            <img :src="`https://ui-avatars.com/api/?name=${currentPost.author}&background=667eea&color=fff`" alt="头像">
+            <img :src="userStore.userInfo?.avatar || `https://ui-avatars.com/api/?name=${currentPost.author}&background=667eea&color=fff`" alt="头像">
           </div>
           <div class="user-info">
             <span class="username">{{ currentPost.author }}</span>
@@ -179,8 +216,19 @@
         <h2 class="detail-post-title">{{ currentPost.title }}</h2>
         <div class="detail-post-body" v-html="renderContent(currentPost.content)"></div>
         <div class="detail-post-actions">
-          <span class="action-stat">👁️ {{ currentPost.view_count }} 浏览</span>
-          <span class="action-stat">💬 {{ currentPost.comment_count }} 回复</span>
+          <div class="detail-actions-left">
+            <span class="action-stat">👁️ {{ currentPost.view_count }} 浏览</span>
+            <span class="action-stat">💬 {{ currentPost.comment_count }} 回复</span>
+          </div>
+          <button 
+            class="detail-like-btn" 
+            @click="handleLike(currentPost)"
+            :class="{ 'liked': currentPost.is_liked }"
+            title="点赞"
+          >
+            <span class="like-icon">{{ currentPost.is_liked ? '❤️' : '🤍' }}</span>
+            <span class="like-count">{{ currentPost.like_count }}</span>
+          </button>
         </div>
         
         <!-- 评论区域 -->
@@ -270,7 +318,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { getPostsApi, createPostApi, deletePostApi, getMyPostsApi, getPostDetailApi, createCommentApi, deleteCommentApi } from '../api/basketball'
+import { getPostsApi, createPostApi, deletePostApi, getMyPostsApi, createCommentApi, deleteCommentApi, likePostApi, getPostDetailWithLikeStatusApi } from '../api/basketball'
 import { userStore } from '../stores/user'
 
 const router = useRouter()
@@ -293,6 +341,8 @@ interface PostItem {
   author_id?: number
   view_count: number
   comment_count: number
+  like_count: number
+  is_liked?: boolean
   is_essence: boolean
   is_published?: boolean
   moderation_status?: string
@@ -308,7 +358,7 @@ const posting = ref(false)
 const showTagInput = ref(false)
 const newTag = ref('')
 const expandedPosts = ref<Set<number>>(new Set())
-const currentTab = ref<'all' | 'my'>('all')
+const currentTab = ref<'all' | 'my' | 'essence'>('all')
 const contentTextarea = ref<HTMLTextAreaElement | null>(null)
 
 // 评论相关
@@ -330,6 +380,14 @@ const imageViewer = ref({
 
 // 帖子详情查看状态
 const currentPost = ref<PostItem | null>(null)
+
+// 分页相关
+const pagination = reactive({
+  currentPage: 1,
+  pageSize: 11,
+  total: 0,
+  totalPages: 0
+})
 
 const newPost = reactive({
   title: '',
@@ -405,8 +463,21 @@ if (typeof window !== 'undefined') {
 const fetchPosts = async () => {
   loading.value = true
   try {
-    const res: any = await getPostsApi()
+    const params: any = {
+      page: pagination.currentPage,
+      page_size: pagination.pageSize
+    }
+    
+    // 只有在请求精品帖子时才添加is_essence参数
+    if (currentTab.value === 'essence') {
+      params.is_essence = 'true'
+    }
+    const res: any = await getPostsApi(params)
     posts.value = res.data || []
+    if (res.pagination) {
+      pagination.total = res.pagination.total
+      pagination.totalPages = res.pagination.total_pages
+    }
   } catch (e) {
     console.error('获取帖子失败', e)
   } finally {
@@ -427,7 +498,7 @@ const fetchMyPosts = async () => {
 }
 
 const refreshPosts = () => {
-  if (currentTab.value === 'all') {
+  if (currentTab.value === 'all' || currentTab.value === 'essence') {
     fetchPosts()
   } else {
     fetchMyPosts()
@@ -437,7 +508,7 @@ const refreshPosts = () => {
 // 监听标签切换
 watch(currentTab, (newTab) => {
   expandedPosts.value.clear() // 清空展开状态
-  if (newTab === 'all') {
+  if (newTab === 'all' || newTab === 'essence') {
     fetchPosts()
   } else {
     fetchMyPosts()
@@ -547,21 +618,50 @@ const removeTag = (index: number) => {
 // 查看帖子详情
 const viewPostDetail = async (post: PostItem) => {
   try {
-    const res: any = await getPostDetailApi(post.id)
+    const res: any = await getPostDetailWithLikeStatusApi(post.id)
     if (res.code === 200) {
       currentPost.value = res.data
-      // 更新列表中的浏览量
+      // 更新列表中的浏览量和点赞状态
       const index = posts.value.findIndex(p => p.id === post.id)
-      if (index !== -1 && res.data.view_count !== undefined) {
+      if (index !== -1) {
         const targetPost = posts.value[index]
         if (targetPost) {
           targetPost.view_count = res.data.view_count
+          targetPost.like_count = res.data.like_count
+          targetPost.is_liked = res.data.is_liked
         }
       }
     }
   } catch (e) {
     console.error('获取帖子详情失败', e)
     currentPost.value = post
+  }
+}
+
+// 处理点赞
+const handleLike = async (post: PostItem) => {
+  if (!userStore.userInfo) {
+    alert('请先登录后再点赞')
+    router.push('/login')
+    return
+  }
+  
+  try {
+    const res: any = await likePostApi(post.id)
+    if (res.code === 200) {
+      // 更新帖子的点赞数和点赞状态
+      post.like_count = res.data.like_count
+      post.is_liked = res.data.is_liked
+      
+      // 如果是当前查看的帖子，也更新currentPost
+      if (currentPost.value && currentPost.value.id === post.id) {
+        currentPost.value.like_count = res.data.like_count
+        currentPost.value.is_liked = res.data.is_liked
+      }
+    }
+  } catch (e) {
+    console.error('点赞操作失败', e)
+    alert('点赞操作失败，请重试')
   }
 }
 
@@ -1326,6 +1426,44 @@ onMounted(() => {
   color: #999;
 }
 
+/* 分页组件样式 */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.page-btn {
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 14px;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.page-btn:hover:not(:disabled) {
+  background-color: #f0f0f0;
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.page-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-info {
+  font-size: 14px;
+  color: #666;
+}
+
 .empty-icon {
   font-size: 48px;
   margin-bottom: 16px;
@@ -1403,6 +1541,73 @@ onMounted(() => {
 .status-tag-simple.rejected {
   background-color: #ffebee;
   color: #f44336;
+}
+
+/* 点赞按钮样式 */
+.like-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: #999;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 16px;
+  transition: all 0.2s ease;
+}
+
+.like-btn:hover {
+  background-color: #f0f0f0;
+  color: #667eea;
+}
+
+.like-btn.liked {
+  color: #f56c6c;
+}
+
+.like-btn.liked:hover {
+  background-color: #ffebee;
+}
+
+.like-icon {
+  font-size: 14px;
+}
+
+.like-count {
+  font-size: 12px;
+}
+
+/* 详情页点赞按钮 */
+.detail-like-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid #e0e0e0;
+  font-size: 14px;
+  color: #666;
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: 20px;
+  transition: all 0.2s ease;
+}
+
+.detail-like-btn:hover {
+  border-color: #667eea;
+  color: #667eea;
+  background-color: rgba(102, 126, 234, 0.05);
+}
+
+.detail-like-btn.liked {
+  border-color: #f56c6c;
+  color: #f56c6c;
+  background-color: #ffebee;
+}
+
+.detail-like-btn.liked:hover {
+  background-color: #fef0f0;
 }
 
 /* 帖子详情页面 */
@@ -1515,9 +1720,15 @@ onMounted(() => {
 
 .detail-post-actions {
   display: flex;
-  gap: 24px;
+  justify-content: space-between;
+  align-items: center;
   padding-top: 16px;
   border-top: 1px solid #f0f0f0;
+}
+
+.detail-actions-left {
+  display: flex;
+  gap: 24px;
 }
 
 .action-stat {
